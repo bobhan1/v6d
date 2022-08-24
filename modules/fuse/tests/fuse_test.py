@@ -15,13 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from logging import fatal
 import os
 from enum import Enum
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-
+import psutil
 
 class Type(Enum):
     STRING = 1
@@ -29,6 +30,7 @@ class Type(Enum):
     DOUBLE = 3
 
 
+    
 def generate_dataframe(size=(3, 4)):
     height, width = size
     ldf = pd.DataFrame(
@@ -158,3 +160,35 @@ def test_fuse_df(vineyard_client, vineyard_fuse_mount_dir):
         str(id)[11:28] + ".arrow", vineyard_fuse_mount_dir
     )
     assert_dataframe(data, extracted_data)
+    
+def test_cache_manager( vineyard_client, vineyard_fuse_mount_dir,vineyard_fuse_process_pid):
+    data = generate_dataframe((20,4))
+    pid = int(vineyard_fuse_process_pid)
+    print("process_id",pid)
+
+    import time
+
+    for _ in range(1, 20):
+        time.sleep(2)
+        print("put 171",_)
+
+        id = vineyard_client.put(data)
+        _ = read_data_from_fuse(
+        str(id)[11:28] + ".arrow", vineyard_fuse_mount_dir
+    )
+
+    memory_usage_before = psutil.Process(pid).memory_info().rss / 1024**2
+    data = generate_dataframe((3,4))
+
+    for _ in range(1, 20):
+        time.sleep(2)
+        print("put 182",_)
+
+        id = vineyard_client.put(data)
+        _ = read_data_from_fuse(
+        str(id)[11:28] + ".arrow", vineyard_fuse_mount_dir
+    )
+
+    memory_usage_after = psutil.Process(pid).memory_info().rss / 1024**2
+    if abs((memory_usage_before) - (memory_usage_after)) > 0.0001: 
+        fatal("memory usage changed")
